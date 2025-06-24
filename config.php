@@ -1,6 +1,6 @@
 <?php
 // config.php
-$host = '192.168.100.5'; // <--- ¡Usa la IP LOCAL de tu Raspberry Pi!
+$host = 'postgres'; // <--- ¡Usa la IP LOCAL de tu Raspberry Pi!
 $db   = 'Ford_bodyshop';
 $user = 'mario';
 $pass = 'Mayito1689'; // Asegúrate de que esta sea la contraseña REAL de tu DB
