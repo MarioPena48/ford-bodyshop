@@ -22,6 +22,11 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == '1') {
 
 require_once '../header.php';
 require_once '../config.php';
+if (session_status() === PHP_SESSION_NONE) session_start();
+if (!isset($_SESSION['usuario'])) {
+    header('Location: /login.php');
+    exit;
+}
 ?>
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">

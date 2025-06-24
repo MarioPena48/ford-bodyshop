@@ -1,4 +1,10 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) session_start();
+if (!isset($_SESSION['usuario'])) {
+    header('Location: /login.php');
+    exit;
+}
+
 // --- AJAX para scroll infinito ---
 if (isset($_GET['ajax']) && $_GET['ajax'] == '1') {
     require_once __DIR__ . '/../config.php';

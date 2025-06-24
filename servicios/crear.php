@@ -18,6 +18,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = $pdo->prepare("INSERT INTO servicios (vehiculo_id, tipo_servicio, descripcion_problema, fecha_estimada_entrega, costo_estimado, estado_servicio, notas, creado_por) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([$vehiculo_id, $tipo_servicio, $descripcion, $fecha_estimada, $costo_estimado, $estado_servicio, $notas, $creado_por]);
         $redirect = true;
+        // Obtener nombre y teléfono del cliente asociado al vehículo
+        $nombre_cliente = '';
+        $telefono_cliente = '';
+        if ($vehiculo_id) {
+            $stmtCliente = $pdo->prepare('SELECT cl.nombre, cl.apellido, cl.telefono FROM vehiculos v JOIN clientes cl ON v.cliente_id = cl.cliente_id WHERE v.vehiculo_id = ?');
+            $stmtCliente->execute([$vehiculo_id]);
+            $cli = $stmtCliente->fetch(PDO::FETCH_ASSOC);
+            if ($cli) {
+                $nombre_cliente = trim($cli['nombre'] . ' ' . $cli['apellido']);
+                $telefono_cliente = $cli['telefono'] ?? '';
+            }
+        }
+        // Enviar webhook a n8n
+        $webhook_url = 'https://n8n.ecologiaendomotica.com/webhook/edotec-sdpoaasddew-fsdf-sdfds-dfsfasdfdshy-455575hkjh/ford-servicio';
+        $payload = [
+            'vehiculo_id' => $vehiculo_id,
+            'tipo_servicio' => $tipo_servicio,
+            'descripcion_problema' => $descripcion,
+            'fecha_estimada_entrega' => $fecha_estimada,
+            'costo_estimado' => $costo_estimado,
+            'estado_servicio' => $estado_servicio,
+            'notas' => $notas,
+            'creado_por' => $creado_por,
+            'cliente_nombre' => $nombre_cliente,
+            'cliente_telefono' => $telefono_cliente
+        ];
+        $ch = curl_init($webhook_url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+        curl_exec($ch);
+        curl_close($ch);
     } catch (PDOException $e) {
         echo '<div class="alert alert-danger" role="alert">Error al agregar el servicio: ' . $e->getMessage() . '</div>';
     }

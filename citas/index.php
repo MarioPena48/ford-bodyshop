@@ -1,11 +1,57 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) session_start();
+if (!isset($_SESSION['usuario'])) {
+    header('Location: /login.php');
+    exit;
+}
+// --- Endpoints AJAX para FullCalendar y servicios ---
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'servicios') {
+    require_once __DIR__ . '/../config.php';
+    header('Content-Type: application/json');
+    $stmt = $pdo->query('SELECT s.servicio_id, s.fecha_estimada_entrega, s.fecha_real_entrega, s.tipo_servicio, v.marca, v.modelo, c.nombre, c.apellido , c.telefono FROM servicios s JOIN vehiculos v ON s.vehiculo_id = v.vehiculo_id JOIN clientes c ON v.cliente_id = c.cliente_id');
+    $eventos = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $servicio) {
+        if ($servicio['fecha_estimada_entrega']) {
+            $eventos[] = [
+                'id' => 'servicio_' . $servicio['servicio_id'],
+                'title' => 'Servicio: ' . $servicio['tipo_servicio'] . ' (' . $servicio['marca'] . ' ' . $servicio['modelo'] . ' - ' . $servicio['nombre'] . ' ' . $servicio['apellido'] . ')',
+                'start' => $servicio['fecha_estimada_entrega'],
+                'color' => '#1565c0',
+                'extendedProps' => [
+                    'tipo' => 'servicio',
+                    'servicio_id' => $servicio['servicio_id'],
+                    'vehiculo' => $servicio['marca'] . ' ' . $servicio['modelo'],
+                    'cliente' => $servicio['nombre'] . ' ' . $servicio['apellido'],
+                    'telefono' => $servicio['telefono'] ?? ''
+                ]
+            ];
+        }
+        if ($servicio['fecha_real_entrega']) {
+            $eventos[] = [
+                'id' => 'servicio_real_' . $servicio['servicio_id'],
+                'title' => 'Entrega: ' . $servicio['tipo_servicio'] . ' (' . $servicio['marca'] . ' ' . $servicio['modelo'] . ' - ' . $servicio['nombre'] . ' ' . $servicio['apellido'] . ')',
+                'start' => $servicio['fecha_real_entrega'],
+                'color' => '#2ecc40',
+                'extendedProps' => [
+                    'tipo' => 'servicio',
+                    'servicio_id' => $servicio['servicio_id'],
+                    'vehiculo' => $servicio['marca'] . ' ' . $servicio['modelo'],
+                    'cliente' => $servicio['nombre'] . ' ' . $servicio['apellido'],
+                    'telefono' => $servicio['telefono'] ?? ''
+                ]
+            ];
+        }
+    }
+    echo json_encode($eventos);
+    exit;
+}
 // --- Endpoints AJAX para FullCalendar ---
 if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
     require_once __DIR__ . '/../config.php';
     header('Content-Type: application/json');
     // Obtener eventos
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-        $stmt = $pdo->query('SELECT c.cita_id, c.fecha_hora_cita, c.notas, cl.nombre, cl.apellido FROM citas c LEFT JOIN clientes cl ON c.cliente_id = cl.cliente_id');
+        $stmt = $pdo->query('SELECT c.cita_id, c.fecha_hora_cita, c.notas, cl.nombre, cl.apellido, cl.telefono FROM citas c LEFT JOIN clientes cl ON c.cliente_id = cl.cliente_id');
         $eventos = [];
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $cita) {
             $eventos[] = [
@@ -14,7 +60,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
                 'start' => $cita['fecha_hora_cita'],
                 'extendedProps' => [
                     'notas' => $cita['notas'],
-                    'cliente_nombre' => ($cita['nombre'] ? $cita['nombre'] . ' ' . $cita['apellido'] : 'Sin cliente')
+                    'cliente_nombre' => ($cita['nombre'] ? $cita['nombre'] . ' ' . $cita['apellido'] : 'Sin cliente'),
+                    'telefono' => $cita['telefono'] ?? ''
                 ]
             ];
         }
@@ -73,7 +120,7 @@ if (!isset($_GET['ajax'])) {
     </div>
     <div class="card border-0 shadow-sm" style="background: #fafbfc;">
         <div class="card-body p-0">
-            <div id='calendarioCitas'></div>
+            <div id='calendarioCitas' style="min-height:600px"></div>
         </div>
     </div>
 </div>
@@ -86,6 +133,7 @@ if (!isset($_GET['ajax'])) {
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
       </div>
       <div class="modal-body" style="padding: 2rem 1.5rem;">
+        <div id="modalCitaBodyExtra"></div>
         <form id="formCita">
           <input type="hidden" id="citaId">
           <div class="mb-3">
@@ -107,6 +155,20 @@ if (!isset($_GET['ajax'])) {
         <button type="button" class="btn btn-danger d-none" id="btnEliminarCita">Eliminar</button>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
         <button type="button" class="btn btn-primary" id="btnGuardarCita">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Modal para mostrar información de servicio -->
+<div class="modal fade" id="modalServicio" tabindex="-1" aria-labelledby="modalServicioLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content border-0 shadow-lg" style="border-radius: 18px; background: #f9fafb;">
+      <div class="modal-header" style="border-bottom: 1px solid #e0e0e0; background: #f4f6f8; border-top-left-radius: 18px; border-top-right-radius: 18px;">
+        <h5 class="modal-title fw-semibold" id="modalServicioLabel" style="color: #222;">Detalle de Servicio</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body" id="modalServicioBody" style="padding: 2rem 1.5rem;">
+        <!-- Aquí se carga la info -->
       </div>
     </div>
   </div>
@@ -175,7 +237,7 @@ function autocompletarCliente() {
     input.addEventListener('blur', () => setTimeout(()=>{list.innerHTML='';},200));
 }
 
-function abrirModalCita({id, cliente_id, cliente_nombre, fecha_hora_cita, notas}, modo) {
+function abrirModalCita({id, cliente_id, cliente_nombre, fecha_hora_cita, notas, telefono}, modo) {
     document.getElementById('citaId').value = id || '';
     document.getElementById('clienteInput').value = cliente_nombre || '';
     document.getElementById('fechaHoraInput').value = fecha_hora_cita ? fecha_hora_cita.replace(' ', 'T').slice(0,16) : '';
@@ -183,8 +245,35 @@ function abrirModalCita({id, cliente_id, cliente_nombre, fecha_hora_cita, notas}
     clienteSeleccionado = cliente_id ? {cliente_id, nombre: cliente_nombre} : null;
     document.getElementById('btnEliminarCita').classList.toggle('d-none', !id);
     mostrarMensajeModal('', 'info');
+    // Mostrar teléfono si existe
+    let telefonoHtml = '';
+    if (telefono) {
+        telefonoHtml = `<div class='mb-2'><i class='fas fa-phone-alt me-2'></i><b>Teléfono:</b> <span class='text-primary'>${telefono}</span></div>`;
+    }
+    document.getElementById('modalCitaBodyExtra').innerHTML = telefonoHtml;
     const modal = new bootstrap.Modal(document.getElementById('modalCita'));
     modal.show();
+}
+
+function mostrarModalServicio(event) {
+    let html = `<div class="mb-3">
+        <div class="fw-bold" style="font-size:1.1rem;">${event.title}</div>
+        <div class="text-muted">Fecha: ${event.start.toLocaleString()}</div>
+        <div><b>Vehículo:</b> ${event.extendedProps.vehiculo || '-'}</div>
+        <div><b>Cliente:</b> ${event.extendedProps.cliente || '-'}</div>
+        <div><b>Teléfono:</b> <span class='text-primary'>${event.extendedProps.telefono ? event.extendedProps.telefono : '-'}</span></div>
+        <div class="mt-2"><a href="/servicios/editar.php?id=${event.extendedProps.servicio_id}" class="btn btn-primary btn-sm">Ver/Editar Servicio</a></div>
+    </div>`;
+    document.getElementById('modalServicioBody').innerHTML = html;
+    var modalEl = document.getElementById('modalServicio');
+    if (window.bootstrap && bootstrap.Modal) {
+        let modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    } else if (typeof $ !== 'undefined' && $(modalEl).modal) {
+        $(modalEl).modal('show');
+    } else {
+        alert('No se pudo abrir el modal.');
+    }
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -199,16 +288,41 @@ document.addEventListener('DOMContentLoaded', function() {
             center: 'title',
             right: 'dayGridMonth,timeGridWeek,timeGridDay'
         },
-        events: 'index.php?ajax=1',
+        buttonText: {
+            today:    'Hoy',
+            month:    'Mes',
+            week:     'Semana',
+            day:      'Día',
+            list:     'Agenda'
+        },
+        allDayText: 'Todo el día',
+        weekText: 'Sm',
+        events: function(fetchInfo, successCallback, failureCallback) {
+            Promise.all([
+                fetch('index.php?ajax=1').then(r=>r.json()),
+                fetch('index.php?ajax=servicios').then(r=>r.json())
+            ]).then(([citas, servicios]) => {
+                console.log('Citas:', citas);
+                console.log('Servicios:', servicios);
+                successCallback([...citas, ...servicios]);
+            }).catch(failureCallback);
+        },
         eventClick: function(info) {
-            const [nombre, ...rest] = info.event.title.split(' - ');
-            abrirModalCita({
-                id: info.event.id,
-                cliente_id: null,
-                cliente_nombre: nombre,
-                fecha_hora_cita: info.event.startStr,
-                notas: info.event.extendedProps.notas
-            }, 'edit');
+            // Si es cita
+            if (!info.event.id.toString().startsWith('servicio')) {
+                const [nombre, ...rest] = info.event.title.split(' - ');
+                abrirModalCita({
+                    id: info.event.id,
+                    cliente_id: null,
+                    cliente_nombre: nombre,
+                    fecha_hora_cita: info.event.startStr,
+                    notas: info.event.extendedProps.notas,
+                    telefono: info.event.extendedProps.telefono // <-- Asegura que se pase el teléfono
+                }, 'edit');
+            } else {
+                // Si es evento de servicio, mostrar info en modal personalizado
+                mostrarModalServicio(info.event);
+            }
         },
         dateClick: function(info) {
             abrirModalCita({fecha_hora_cita: info.dateStr + 'T00:00'}, 'create');
@@ -276,25 +390,48 @@ input:focus, .btn:focus {
     white-space: nowrap;
 }
 #modalCita .modal-content {
-    border-radius: 18px;
-    background: #f9fafb;
+    border-radius: 22px;
+    background: linear-gradient(135deg, #f9fafb 80%, #e3f0ff 100%);
     border: none;
+    box-shadow: 0 8px 32px #1565c033;
 }
 #modalCita .modal-header {
     border-bottom: 1px solid #e0e0e0;
-    background: #f4f6f8;
-    border-top-left-radius: 18px;
-    border-top-right-radius: 18px;
+    background: linear-gradient(90deg, #f4f6f8 80%, #e3f0ff 100%);
+    border-top-left-radius: 22px;
+    border-top-right-radius: 22px;
 }
 #modalCita .modal-title {
-    color: #222;
-    font-weight: 600;
+    color: #1565c0;
+    font-weight: 700;
+    letter-spacing: 0.5px;
 }
 #modalCita .modal-body {
     padding: 2rem 1.5rem;
 }
 #modalCita .badge {
     font-size: 0.95rem;
+}
+#modalCita input, #modalCita textarea {
+    border-radius: 12px;
+    border: 1px solid #d0d7de;
+    background: #f7fafd;
+}
+#modalCita input:focus, #modalCita textarea:focus {
+    border-color: #1565c0;
+    box-shadow: 0 0 0 2px #1565c033;
+}
+#modalCita .btn-primary {
+    background: linear-gradient(90deg, #1565c0 60%, #2ecc40 100%);
+    border: none;
+    border-radius: 20px;
+    font-weight: 600;
+}
+#modalCita .btn-danger {
+    border-radius: 20px;
+}
+#modalCita .btn-secondary {
+    border-radius: 20px;
 }
 </style>
 <?php if (!isset($_GET['ajax'])) {
