@@ -1,4 +1,8 @@
 <?php // header.php ?>
+<?php
+// session_start debe ir ANTES de cualquier salida, incluso antes del DOCTYPE o espacios en blanco
+if (session_status() === PHP_SESSION_NONE) session_start();
+?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -26,7 +30,6 @@
         <li class="nav-item"><a class="nav-link" href="/usuarios/index.php">Usuarios</a></li>
       </ul>
       <?php
-      if (session_status() === PHP_SESSION_NONE) session_start();
       $nombre = $_SESSION['nombre'] ?? ($_COOKIE['usuario_nombre'] ?? null);
       $rol = $_SESSION['rol'] ?? ($_COOKIE['usuario_rol'] ?? null);
       $usuario_id = $_SESSION['usuario_id'] ?? ($_COOKIE['usuario_id'] ?? null);
